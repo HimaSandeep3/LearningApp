@@ -1,4 +1,4 @@
-# Build -> zip published output -> upload zip -> download -> deploy zip
+# Build -> zip published output -> upload zip -> download -> locate package -> deploy
 
 name: Build and deploy ASP app to Azure Web App - AspDotNetLearning
 
@@ -30,8 +30,7 @@ jobs:
 
       - name: Show published files (debug)
         run: |
-          echo "Published files count and sample:"
-          powershell -Command "Get-ChildItem -Path published -Recurse | Select-Object FullName,Length | Select-Object -First 20"
+          powershell -Command "Get-ChildItem -Path published -Recurse | Select-Object FullName,Length | Select-Object -First 50"
 
       - name: Zip published output
         run: |
@@ -66,6 +65,41 @@ jobs:
           echo "Contents of ASP-app folder if present:"
           if (Test-Path ASP-app) { Get-ChildItem -Path ASP-app -Recurse | Format-Table } else { echo "ASP-app folder not present." }
 
+      - name: Locate package to deploy
+        id: findpkg
+        shell: pwsh
+        run: |
+          Write-Host "Searching for app.zip or a published folder..."
+          $zip = Get-ChildItem -Path $PWD -Filter 'app.zip' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($zip) {
+            Write-Host "Found zip: $($zip.FullName)"
+            ('PACKAGE_PATH=' + $zip.FullName) | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+            exit 0
+          }
+          # Look for a 'published' folder (or fallback to any folder inside ASP-app)
+          $pub = Get-ChildItem -Path $PWD -Directory -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'published' } | Select-Object -First 1
+          if ($pub) {
+            Write-Host "Found published folder: $($pub.FullName)"
+            ('PACKAGE_PATH=' + $pub.FullName) | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+            exit 0
+          }
+          $asp = Join-Path $PWD 'ASP-app'
+          if (Test-Path $asp) {
+            $firstChild = Get-ChildItem -Path $asp -Force | Select-Object -First 1
+            if ($firstChild) {
+              Write-Host "Using ASP-app folder: $asp"
+              ('PACKAGE_PATH=' + $asp) | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+              exit 0
+            }
+          }
+          Write-Error "No package (zip or published folder) found in workspace."
+          exit 1
+
+      - name: Show chosen package path (debug)
+        run: |
+          echo "PACKAGE_PATH = ${{ steps.findpkg.outputs.PACKAGE_PATH }}"
+          if (Test-Path "${{ steps.findpkg.outputs.PACKAGE_PATH }}" ) { Get-ChildItem -Path "${{ steps.findpkg.outputs.PACKAGE_PATH }}" -Recurse | Select-Object FullName,Length | Format-Table -AutoSize } else { echo "Chosen package path not present." }
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -78,4 +112,4 @@ jobs:
         with:
           app-name: 'AspDotNetLearning'
           slot-name: 'Production'
-          package: './ASP-app/app.zip'
+          package: ${{ steps.findpkg.outputs.PACKAGE_PATH }}
