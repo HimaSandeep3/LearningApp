@@ -1,4 +1,4 @@
-# Build -> publish to folder -> upload published/** -> download -> deploy folder
+# Build -> zip published output -> upload zip -> download -> deploy zip
 
 name: Build and deploy ASP app to Azure Web App - AspDotNetLearning
 
@@ -28,11 +28,23 @@ jobs:
       - name: Publish to folder
         run: dotnet publish ./LearningApp/LearningApp.csproj -c Release -o ./published
 
+      - name: Show published files (debug)
+        run: |
+          echo "Published files count and sample:"
+          powershell -Command "Get-ChildItem -Path published -Recurse | Select-Object FullName,Length | Select-Object -First 20"
+
+      - name: Zip published output
+        run: |
+          powershell -Command "Compress-Archive -Path published/* -DestinationPath app.zip -Force"
+
+      - name: Show zip info (debug)
+        run: powershell -Command "Get-Item app.zip | Format-List"
+
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: ASP-app
-          path: 'published/**'
+          path: app.zip
 
   deploy:
     runs-on: windows-latest
@@ -51,8 +63,8 @@ jobs:
         run: |
           echo "Workspace root:"
           dir
-          echo "Contents of ASP-app folder:"
-          if (Test-Path ASP-app) { Get-ChildItem -Path ASP-app -Recurse | Format-Table } else { echo "ASP-app folder not found." }
+          echo "Contents of ASP-app folder if present:"
+          if (Test-Path ASP-app) { Get-ChildItem -Path ASP-app -Recurse | Format-Table } else { echo "ASP-app folder not present." }
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -66,4 +78,4 @@ jobs:
         with:
           app-name: 'AspDotNetLearning'
           slot-name: 'Production'
-          package: './ASP-app'
+          package: './ASP-app/app.zip'
