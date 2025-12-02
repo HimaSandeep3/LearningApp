@@ -13,10 +13,15 @@ jobs:
   build:
     runs-on: windows-latest
     permissions:
-      contents: read #This is required for actions/checkout
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
 
       - name: Setup MSBuild path
         uses: microsoft/setup-msbuild@v1.0.2
@@ -25,30 +30,49 @@ jobs:
         uses: NuGet/setup-nuget@v1.0.5
 
       - name: Restore NuGet packages
-        run: nuget restore
+        run: dotnet restore ./LearningApp/LearningApp.csproj
 
       - name: Publish to folder
-        run: msbuild /nologo /verbosity:m /t:Build /t:pipelinePreDeployCopyAllFilesToOneFolder /p:_PackageTempDir="\published\"
+        run: dotnet publish ./LearningApp/LearningApp.csproj -c Release -o ./published
+
+      - name: Show published files (debug)
+        run: |
+          echo "Published files:"
+          dir published
+
+      - name: Zip published output
+        run: |
+          powershell -Command "Compress-Archive -Path published/* -DestinationPath app.zip -Force"
+
+      - name: Show zip info (debug)
+        run: powershell -Command "Get-Item app.zip | Format-List"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: ASP-app
-          path: '/published/**'
+          path: app.zip
 
   deploy:
     runs-on: windows-latest
     needs: build
     permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
+      id-token: write
+      contents: read
 
     steps:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: ASP-app
-      
+
+      - name: Show downloaded artifact (debug)
+        run: |
+          echo "Downloaded workspace root:"
+          dir
+          echo "Contents of ASP-app folder:"
+          if (Test-Path ASP-app) { dir ASP-app } else { echo "ASP-app folder not present." }
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -62,5 +86,4 @@ jobs:
         with:
           app-name: 'AspDotNetLearning'
           slot-name: 'Production'
-          package: .
-          
+          package: './ASP-app/app.zip'
