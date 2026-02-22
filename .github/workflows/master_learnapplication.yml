@@ -18,23 +18,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup MSBuild path
-        uses: microsoft/setup-msbuild@v1.0.2
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
 
       - name: Setup NuGet
         uses: NuGet/setup-nuget@v1.0.5
 
-      - name: Restore NuGet packages
-        run: nuget restore
+      - name: Restore 
+        run: dotnet restore ./LearningApp/LearningApp.csproj
 
       - name: Publish to folder
-        run: msbuild /nologo /verbosity:m /t:Build /t:pipelinePreDeployCopyAllFilesToOneFolder /p:_PackageTempDir="\published\"
+        run: dotnet publish ./LearningApp/LearningApp.csproj -c Release -o ./published
+
+      - name: Zip published output
+
+        run: powershell -Command "Compress-Archive -Path published/* -DestinationPath app.zip -Force"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: ASP-app
-          path: '/published/**'
+          path: app.zip
+
 
   deploy:
     runs-on: windows-latest
@@ -48,7 +55,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ASP-app
-      
+          path: 'ASP-app'
+          
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -62,5 +70,6 @@ jobs:
         with:
           app-name: 'learnapplication'
           slot-name: 'Production'
-          package: .
+          package: './ASP-app/app.zip'
+
           
