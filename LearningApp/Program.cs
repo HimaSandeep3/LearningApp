@@ -25,5 +25,5 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}")
     .WithStaticAssets();
 
-
+//command to publish - dotnet publish -c Release -o ./bin/Publish
 app.Run();
