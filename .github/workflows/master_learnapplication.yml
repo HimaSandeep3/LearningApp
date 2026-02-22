@@ -65,6 +65,7 @@ jobs:
         with:
           app-name: 'learnapplication'
           slot-name: 'Production'
-          package: .
+          package: './ASP-app/app.zip'
 
           
+
